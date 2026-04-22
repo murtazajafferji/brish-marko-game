@@ -1,754 +1,514 @@
 const canvas = document.getElementById('c');
 const ctx = canvas.getContext('2d');
 
-// -------------------------
-// Basic setup
-// -------------------------
-const DPR = () => Math.min(window.devicePixelRatio || 1, 2);
-function resize() {
-  const dpr = DPR();
+function fit() {
+  const dpr = Math.min(window.devicePixelRatio || 1, 2);
   canvas.width = Math.floor(window.innerWidth * dpr);
   canvas.height = Math.floor(window.innerHeight * dpr);
   canvas.style.width = window.innerWidth + 'px';
   canvas.style.height = window.innerHeight + 'px';
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
 }
-window.addEventListener('resize', resize);
-resize();
+window.addEventListener('resize', fit);
+fit();
 
+const W = () => window.innerWidth;
+const H = () => window.innerHeight;
 const TAU = Math.PI * 2;
-const rand = (a, b) => a + Math.random() * (b - a);
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+const rand = (a, b) => a + Math.random() * (b - a);
 const dist = (ax, ay, bx, by) => Math.hypot(ax - bx, ay - by);
 
-// -------------------------
-// Assets
-// -------------------------
-const assets = {};
-const assetList = {
+const images = {};
+const imageSources = {
   brishStrip: 'sprites/brish-strip.png',
   monkoStrip: 'sprites/monko-strip.png',
   brish: 'sprites/brish.png',
-  monko: 'sprites/monko.png',
-  brishCar: 'sprites/brish-car.png',
-  monkoCar: 'sprites/monko-car.png'
+  monko: 'sprites/monko.png'
 };
-let loadedAssets = 0;
-const totalAssets = Object.keys(assetList).length;
-for (const [key, src] of Object.entries(assetList)) {
+let assetsLoaded = 0;
+const assetsTotal = Object.keys(imageSources).length;
+for (const [k, src] of Object.entries(imageSources)) {
   const img = new Image();
-  img.onload = () => loadedAssets++;
-  img.onerror = () => loadedAssets++;
+  img.onload = () => assetsLoaded++;
+  img.onerror = () => assetsLoaded++;
   img.src = src;
-  assets[key] = img;
+  images[k] = img;
 }
 
-// -------------------------
-// Theme / content
-// -------------------------
-const heroes = {
+const HEROES = {
   brish: {
     name: 'Brish',
-    accent: '#ff8a65',
-    accent2: '#ffca28',
-    autoAttackLabel: 'Punch',
-    powerLabel: 'Mega Slam',
-    specialLabel: 'Car Charge',
-    baseSpeed: 3.5,
-    maxHp: 140
+    color: '#ff8a65',
+    color2: '#ffca28',
+    autoRange: 90,
+    autoCd: 24,
+    autoDamage: 12,
+    specialName: 'Crown Slam'
   },
   monko: {
     name: 'Monko',
-    accent: '#ab47bc',
-    accent2: '#42a5f5',
-    autoAttackLabel: 'Magic Shot',
-    powerLabel: 'Sharp Dash',
-    specialLabel: 'Flower Burst',
-    baseSpeed: 3.9,
-    maxHp: 115
+    color: '#ab47bc',
+    color2: '#42a5f5',
+    autoRange: 360,
+    autoCd: 20,
+    autoDamage: 10,
+    specialName: 'Flower Burst'
   }
 };
 
-const levels = [
+const WORLDS = [
   {
-    id: 'lego',
     name: 'Lego Land',
     emoji: '🧱',
-    colors: {
-      bg1: '#0f172a', bg2: '#1e3a8a', grid: 'rgba(255,255,255,.06)',
-      floor: '#162033', floor2: '#1f2d47', obstacle: '#ffb74d', obstacle2: '#fb8c00'
-    },
-    world: { w: 2200, h: 1300 },
-    obstacles: [
-      { x: 400, y: 220, w: 280, h: 90 }, { x: 900, y: 250, w: 120, h: 320 },
-      { x: 1320, y: 180, w: 240, h: 110 }, { x: 1700, y: 650, w: 260, h: 120 },
-      { x: 300, y: 860, w: 220, h: 160 }, { x: 1080, y: 840, w: 360, h: 100 }
-    ]
+    sky1: '#9dd6ff',
+    sky2: '#4f8cff',
+    ground: '#91d16f',
+    decor1: '#ffb74d',
+    decor2: '#fb8c00'
   },
   {
-    id: 'beach',
     name: 'Beach World',
     emoji: '🏖️',
-    colors: {
-      bg1: '#052f5f', bg2: '#0ea5e9', grid: 'rgba(255,255,255,.08)',
-      floor: '#0f4c81', floor2: '#155e95', obstacle: '#f4d06f', obstacle2: '#f59e0b'
-    },
-    world: { w: 2300, h: 1350 },
-    obstacles: [
-      { x: 500, y: 300, w: 160, h: 140 }, { x: 820, y: 760, w: 300, h: 100 },
-      { x: 1450, y: 300, w: 220, h: 150 }, { x: 1650, y: 900, w: 180, h: 180 },
-      { x: 280, y: 1040, w: 240, h: 120 }, { x: 1110, y: 530, w: 120, h: 250 }
-    ]
+    sky1: '#8fe8ff',
+    sky2: '#0089d1',
+    ground: '#f2d28f',
+    decor1: '#4fc3f7',
+    decor2: '#0288d1'
   },
   {
-    id: 'mini',
     name: 'Mini World',
     emoji: '🔬',
-    colors: {
-      bg1: '#1b1035', bg2: '#4c1d95', grid: 'rgba(255,255,255,.06)',
-      floor: '#24113f', floor2: '#341b58', obstacle: '#c4b5fd', obstacle2: '#8b5cf6'
-    },
-    world: { w: 2400, h: 1400 },
-    obstacles: [
-      { x: 360, y: 260, w: 220, h: 120 }, { x: 820, y: 240, w: 120, h: 360 },
-      { x: 1180, y: 760, w: 300, h: 120 }, { x: 1720, y: 260, w: 220, h: 140 },
-      { x: 1780, y: 920, w: 240, h: 140 }, { x: 560, y: 980, w: 260, h: 120 }
-    ]
+    sky1: '#d8c5ff',
+    sky2: '#6a3dd9',
+    ground: '#d9d9f6',
+    decor1: '#ba68c8',
+    decor2: '#7b1fa2'
   }
 ];
 
-const enemyArchetypes = [
-  { type: 'blob', hp: 28, speed: 1.45, r: 18, color: '#ef4444', damage: 8 },
-  { type: 'tank', hp: 55, speed: 0.95, r: 26, color: '#f59e0b', damage: 14 },
-  { type: 'swift', hp: 18, speed: 2.05, r: 14, color: '#06b6d4', damage: 7 }
-];
-
-// -------------------------
-// Game state
-// -------------------------
 const state = {
-  scene: 'menu', // menu, playing, win, gameover
-  selectedHero: 'brish',
-  selectedLevel: 0,
-  world: levels[0],
-  player: null,
-  enemies: [],
-  projectiles: [],
-  particles: [],
-  camera: { x: 0, y: 0, shake: 0 },
-  wave: 1,
-  maxWave: 4,
-  waveTimer: 0,
+  scene: 'menu',
+  hero: 'brish',
+  worldIndex: 0,
+  distance: 0,
   score: 0,
-  uiButtons: [],
-  tutorialSeen: false,
-  menuPulse: 0
-};
-
-// -------------------------
-// Input
-// -------------------------
-const kb = {};
-window.addEventListener('keydown', e => {
-  kb[e.key.toLowerCase()] = true;
-  if (state.scene === 'menu' && (e.key === 'Enter' || e.key === ' ')) startGame();
-  if (state.scene === 'playing') {
-    if (e.key.toLowerCase() === ' ') usePower();
-    if (e.key.toLowerCase() === 'shift') useSpecial();
-  }
-});
-window.addEventListener('keyup', e => { kb[e.key.toLowerCase()] = false; });
-
-const pointer = {
-  active: false,
-  x: 0,
-  y: 0,
+  best: 0,
+  speed: 6,
+  baseSpeed: 6,
+  enemyTimer: 0,
+  obstacleTimer: 0,
+  particles: [],
+  projectiles: [],
+  enemies: [],
+  obstacles: [],
+  player: null,
+  menuPulse: 0,
+  tutorialDismissed: false,
+  pointerDown: false,
+  pointerX: 0,
+  pointerY: 0,
+  pressX: 0,
+  pressY: 0,
+  swipeTriggered: false,
   justPressed: false,
-  justReleased: false,
-  leftStickId: null,
-  leftStartX: 0,
-  leftStartY: 0,
-  leftDX: 0,
-  leftDY: 0,
-  rightButtons: new Set()
+  cameraShake: 0,
+  ui: {}
 };
-
-function canvasPos(ev) {
-  const rect = canvas.getBoundingClientRect();
-  return { x: ev.clientX - rect.left, y: ev.clientY - rect.top };
-}
-
-function handlePress(x, y) {
-  pointer.active = true;
-  pointer.x = x;
-  pointer.y = y;
-  pointer.justPressed = true;
-}
-function handleRelease(x, y) {
-  pointer.x = x;
-  pointer.y = y;
-  pointer.justReleased = true;
-}
-canvas.addEventListener('mousedown', e => {
-  const p = canvasPos(e);
-  handlePress(p.x, p.y);
-});
-window.addEventListener('mouseup', e => {
-  const p = canvasPos(e);
-  handleRelease(p.x, p.y);
-  pointer.active = false;
-});
-window.addEventListener('mousemove', e => {
-  const p = canvasPos(e);
-  pointer.x = p.x; pointer.y = p.y;
-});
-
-canvas.addEventListener('touchstart', e => {
-  e.preventDefault();
-  const rect = canvas.getBoundingClientRect();
-  for (const t of e.changedTouches) {
-    const x = t.clientX - rect.left;
-    const y = t.clientY - rect.top;
-    if (x < rect.width * 0.5 && pointer.leftStickId === null) {
-      pointer.leftStickId = t.identifier;
-      pointer.leftStartX = x;
-      pointer.leftStartY = y;
-      pointer.leftDX = 0;
-      pointer.leftDY = 0;
-    } else {
-      pointer.rightButtons.add(t.identifier);
-      pointer.x = x; pointer.y = y; pointer.justPressed = true;
-    }
-  }
-}, { passive: false });
-
-canvas.addEventListener('touchmove', e => {
-  e.preventDefault();
-  const rect = canvas.getBoundingClientRect();
-  for (const t of e.changedTouches) {
-    const x = t.clientX - rect.left;
-    const y = t.clientY - rect.top;
-    if (t.identifier === pointer.leftStickId) {
-      pointer.leftDX = x - pointer.leftStartX;
-      pointer.leftDY = y - pointer.leftStartY;
-    } else if (pointer.rightButtons.has(t.identifier)) {
-      pointer.x = x; pointer.y = y;
-    }
-  }
-}, { passive: false });
-
-canvas.addEventListener('touchend', e => {
-  e.preventDefault();
-  const rect = canvas.getBoundingClientRect();
-  for (const t of e.changedTouches) {
-    const x = t.clientX - rect.left;
-    const y = t.clientY - rect.top;
-    if (t.identifier === pointer.leftStickId) {
-      pointer.leftStickId = null;
-      pointer.leftDX = 0;
-      pointer.leftDY = 0;
-    } else if (pointer.rightButtons.has(t.identifier)) {
-      pointer.rightButtons.delete(t.identifier);
-      pointer.x = x; pointer.y = y; pointer.justReleased = true;
-    }
-  }
-}, { passive: false });
-
-// -------------------------
-// Utility
-// -------------------------
-function screenShake(amount) {
-  state.camera.shake = Math.max(state.camera.shake, amount);
-}
-function burst(x, y, color, n = 8, speed = 3) {
-  for (let i = 0; i < n; i++) {
-    const a = Math.random() * TAU;
-    const s = Math.random() * speed;
-    state.particles.push({ x, y, vx: Math.cos(a) * s, vy: Math.sin(a) * s, life: rand(18, 36), color, size: rand(2, 6) });
-  }
-}
-function worldToScreen(x, y) {
-  return { x: x - state.camera.x, y: y - state.camera.y };
-}
-function pointInRect(px, py, r) {
-  return px >= r.x && px <= r.x + r.w && py >= r.y && py <= r.y + r.h;
-}
-function circleHitsRect(cx, cy, r, rect) {
-  const nx = clamp(cx, rect.x, rect.x + rect.w);
-  const ny = clamp(cy, rect.y, rect.y + rect.h);
-  return dist(cx, cy, nx, ny) < r;
-}
-function nearestEnemy(range = 99999) {
-  const p = state.player;
-  let best = null, bestD = range;
-  for (const e of state.enemies) {
-    if (e.dead) continue;
-    const d = dist(p.x, p.y, e.x, e.y);
-    if (d < bestD) { bestD = d; best = e; }
-  }
-  return best;
-}
-
-// -------------------------
-// World / player init
-// -------------------------
-function spawnWave(wave) {
-  const L = state.world;
-  const count = 5 + wave * 2;
-  state.enemies = [];
-  for (let i = 0; i < count; i++) {
-    const a = enemyArchetypes[Math.floor(Math.random() * Math.min(enemyArchetypes.length, 1 + Math.floor(wave / 2)))];
-    let x, y;
-    const side = Math.floor(Math.random() * 4);
-    if (side === 0) { x = rand(50, L.world.w - 50); y = 40; }
-    if (side === 1) { x = L.world.w - 40; y = rand(50, L.world.h - 50); }
-    if (side === 2) { x = rand(50, L.world.w - 50); y = L.world.h - 40; }
-    if (side === 3) { x = 40; y = rand(50, L.world.h - 50); }
-    state.enemies.push({
-      x, y, vx: 0, vy: 0,
-      r: a.r, hp: a.hp + wave * 4, maxHp: a.hp + wave * 4,
-      speed: a.speed + wave * 0.05,
-      color: a.color,
-      damage: a.damage,
-      type: a.type,
-      dead: false,
-      hurt: 0,
-      attackCd: 0
-    });
-  }
-  state.waveTimer = 45;
-}
 
 function makePlayer() {
-  const hero = heroes[state.selectedHero];
   return {
-    hero: state.selectedHero,
-    x: state.world.world.w * 0.5,
-    y: state.world.world.h * 0.5,
-    vx: 0,
+    x: W() * 0.25,
+    y: H() * 0.68,
+    w: 78,
+    h: 104,
     vy: 0,
-    r: 34,
-    hp: hero.maxHp,
-    maxHp: hero.maxHp,
-    baseSpeed: hero.baseSpeed,
-    autoCd: 0,
-    powerCd: 0,
+    onGround: true,
+    holdJump: false,
+    jumpBuffer: 0,
+    attackCd: 0,
     specialCd: 0,
-    carTimer: 0,
-    attackFlash: 0,
-    dashTimer: 0,
-    dashVX: 0,
-    dashVY: 0,
-    hurt: 0,
-    facing: 1,
+    hp: 100,
+    maxHp: 100,
     animTimer: 0,
     animFrame: 0,
-    animState: 'idle'
+    animState: 'idle',
+    attackFlash: 0,
+    hurt: 0,
+    invuln: 0
   };
 }
 
-function startGame() {
-  state.scene = 'playing';
-  state.world = levels[state.selectedLevel];
-  state.player = makePlayer();
-  state.wave = 1;
+function resetGame() {
+  state.distance = 0;
   state.score = 0;
+  state.speed = state.baseSpeed = 6;
+  state.enemyTimer = 35;
+  state.obstacleTimer = 45;
   state.particles = [];
   state.projectiles = [];
-  state.camera.x = 0;
-  state.camera.y = 0;
-  state.camera.shake = 0;
-  spawnWave(1);
+  state.enemies = [];
+  state.obstacles = [];
+  state.player = makePlayer();
+  state.cameraShake = 0;
+  state.worldIndex = 0;
+  state.scene = 'playing';
 }
 
-function returnToMenu() {
-  state.scene = 'menu';
-}
-
-// -------------------------
-// Player abilities
-// -------------------------
-function hitEnemy(enemy, dmg, knock = 0, color = '#fff') {
-  enemy.hp -= dmg;
-  enemy.hurt = 10;
-  burst(enemy.x, enemy.y, color, 8, 3.5);
-  if (knock > 0) {
-    const dx = enemy.x - state.player.x;
-    const dy = enemy.y - state.player.y;
-    const d = Math.max(1, Math.hypot(dx, dy));
-    enemy.x += (dx / d) * knock;
-    enemy.y += (dy / d) * knock;
-  }
-  if (enemy.hp <= 0) {
-    enemy.dead = true;
-    state.score += 10;
-    burst(enemy.x, enemy.y, color, 18, 5);
-    screenShake(6);
+function burst(x, y, color, count = 10, speed = 4) {
+  for (let i = 0; i < count; i++) {
+    const a = Math.random() * TAU;
+    const s = Math.random() * speed;
+    state.particles.push({
+      x, y,
+      vx: Math.cos(a) * s,
+      vy: Math.sin(a) * s,
+      life: rand(15, 35),
+      color,
+      size: rand(2, 5)
+    });
   }
 }
 
-function usePower() {
-  const p = state.player;
-  if (!p || p.powerCd > 0) return;
+function shake(v) { state.cameraShake = Math.max(state.cameraShake, v); }
 
-  if (p.hero === 'brish') {
-    screenShake(10);
-    burst(p.x, p.y, heroes.brish.accent, 28, 6);
-    for (const e of state.enemies) {
-      if (e.dead) continue;
-      const d = dist(p.x, p.y, e.x, e.y);
-      if (d < 170) hitEnemy(e, 24, 32, heroes.brish.accent);
-    }
-    p.attackFlash = 12;
-    p.powerCd = 180;
+function groundY() { return H() * 0.74; }
+
+function screenX(worldX) { return worldX - state.distance + W() * 0.22; }
+
+function heroAnim(hero, player) {
+  if (player.attackFlash > 0) return hero === 'brish' ? [6, 7] : [6, 7];
+  if (!player.onGround) return [player.vy < 0 ? 4 : 5];
+  if (state.speed > 6.6) return [1, 2, 3, 2];
+  return [0];
+}
+
+function spawnEnemy() {
+  const world = WORLDS[state.worldIndex];
+  const type = Math.random();
+  const gx = state.distance + W() + rand(140, 300);
+  const gy = groundY();
+  if (type < 0.65) {
+    state.enemies.push({
+      type: 'runner',
+      x: gx,
+      y: gy,
+      w: 42,
+      h: 42,
+      hp: 18 + Math.floor(state.distance / 700),
+      maxHp: 18 + Math.floor(state.distance / 700),
+      color: world.decor2,
+      speed: rand(1.2, 2.5),
+      hurt: 0,
+      dead: false,
+      attackCd: 0
+    });
   } else {
-    // sharp dash
-    const target = getMoveVector();
-    const dx = target.x || p.facing || 1;
-    const dy = target.y || 0;
-    const mag = Math.max(1, Math.hypot(dx, dy));
-    p.dashTimer = 16;
-    p.dashVX = dx / mag * 14;
-    p.dashVY = dy / mag * 14;
-    p.powerCd = 140;
-    burst(p.x, p.y, heroes.monko.accent, 18, 4);
-    screenShake(7);
+    state.enemies.push({
+      type: 'hopper',
+      x: gx,
+      y: gy - rand(70, 130),
+      w: 38,
+      h: 38,
+      hp: 12 + Math.floor(state.distance / 900),
+      maxHp: 12 + Math.floor(state.distance / 900),
+      color: '#ef4444',
+      speed: rand(1.8, 2.8),
+      hurt: 0,
+      dead: false,
+      attackCd: 0,
+      bob: rand(0, 1000)
+    });
+  }
+}
+
+function spawnObstacle() {
+  const world = WORLDS[state.worldIndex];
+  const gx = state.distance + W() + rand(220, 420);
+  const choice = Math.random();
+  if (choice < 0.5) {
+    state.obstacles.push({ type: 'block', x: gx, y: groundY() - 40, w: rand(40, 80), h: rand(40, 95), color: world.decor1 });
+  } else if (choice < 0.8) {
+    state.obstacles.push({ type: 'gap', x: gx, y: groundY(), w: rand(70, 130), h: 40 });
+  } else {
+    state.obstacles.push({ type: 'high', x: gx, y: groundY() - 120, w: rand(36, 56), h: rand(80, 120), color: world.decor2 });
   }
 }
 
 function useSpecial() {
   const p = state.player;
-  if (!p || p.specialCd > 0) return;
-
-  if (p.hero === 'brish') {
-    p.carTimer = 210;
-    p.specialCd = 420;
-    burst(p.x, p.y, heroes.brish.accent2, 24, 4);
-    screenShake(8);
+  if (p.specialCd > 0) return;
+  const hero = HEROES[state.hero];
+  if (state.hero === 'brish') {
+    p.attackFlash = 14;
+    shake(10);
+    burst(p.x + 20, p.y - 30, hero.color2, 26, 6);
+    for (const e of state.enemies) {
+      if (e.dead) continue;
+      if (Math.abs(e.x - state.distance - W() * 0.22) < 220) {
+        e.hp -= 30;
+        e.hurt = 10;
+        if (e.hp <= 0) {
+          e.dead = true;
+          state.score += 30;
+          burst(screenX(e.x), e.y - e.h * 0.5, hero.color, 18, 5);
+        }
+      }
+    }
+    for (const o of state.obstacles) {
+      if (o.type === 'block' && Math.abs(o.x - state.distance - W() * 0.22) < 180) {
+        o.dead = true;
+        burst(screenX(o.x), o.y - o.h * 0.5, hero.color2, 18, 5);
+      }
+    }
+    p.specialCd = 260;
   } else {
-    // flower burst
-    const n = 10;
-    for (let i = 0; i < n; i++) {
-      const a = (i / n) * TAU;
+    p.attackFlash = 12;
+    shake(8);
+    burst(p.x + 20, p.y - 50, hero.color2, 18, 5);
+    for (let i = 0; i < 6; i++) {
       state.projectiles.push({
-        kind: 'orb',
-        x: p.x,
-        y: p.y,
-        vx: Math.cos(a) * 7,
-        vy: Math.sin(a) * 7,
-        r: 10,
-        life: 70,
-        damage: 18,
-        color: heroes.monko.accent2
+        x: state.distance + p.x,
+        y: p.y - 56,
+        vx: 9 + i * 0.6,
+        vy: -2.5 + i * 0.9,
+        life: 60,
+        r: 9,
+        damage: 16,
+        color: hero.color2
       });
     }
-    p.specialCd = 300;
-    p.attackFlash = 10;
-    burst(p.x, p.y, heroes.monko.accent2, 28, 5);
-    screenShake(9);
+    p.specialCd = 220;
   }
 }
 
-function doAutoAttack() {
+function autoAttack() {
   const p = state.player;
-  if (!p || p.autoCd > 0) return;
-  const target = nearestEnemy(p.hero === 'brish' ? 160 : 520);
+  const hero = HEROES[state.hero];
+  if (p.attackCd > 0) return;
+
+  let target = null;
+  let best = Infinity;
+  for (const e of state.enemies) {
+    if (e.dead) continue;
+    const dx = screenX(e.x) - p.x;
+    const dy = e.y - p.y;
+    const d = Math.hypot(dx, dy);
+    if (dx > -30 && dx < hero.autoRange && d < best) {
+      best = d;
+      target = e;
+    }
+  }
   if (!target) return;
 
-  if (p.hero === 'brish') {
-    hitEnemy(target, 12, 18, heroes.brish.accent);
-    p.attackFlash = 6;
-    screenShake(4);
-    p.autoCd = 22;
+  p.attackFlash = 8;
+  if (state.hero === 'brish') {
+    target.hp -= hero.autoDamage;
+    target.hurt = 8;
+    burst(screenX(target.x), target.y - target.h * 0.5, hero.color, 10, 3.5);
+    shake(4);
+    if (target.hp <= 0) {
+      target.dead = true;
+      state.score += 12;
+      burst(screenX(target.x), target.y - target.h * 0.5, hero.color2, 16, 4.5);
+    }
+    p.attackCd = hero.autoCd;
   } else {
-    const dx = target.x - p.x;
-    const dy = target.y - p.y;
-    const d = Math.max(1, Math.hypot(dx, dy));
     state.projectiles.push({
-      kind: 'orb',
-      x: p.x,
-      y: p.y - 8,
-      vx: dx / d * 8,
-      vy: dy / d * 8,
-      r: 8,
+      x: state.distance + p.x + 10,
+      y: p.y - 48,
+      vx: 10,
+      vy: clamp((target.y - (p.y - 48)) * 0.03, -2.2, 2.2),
       life: 70,
-      damage: 10,
-      color: heroes.monko.accent
+      r: 7,
+      damage: hero.autoDamage,
+      color: hero.color
     });
-    p.attackFlash = 4;
-    p.autoCd = 18;
+    p.attackCd = hero.autoCd;
   }
 }
 
-// -------------------------
-// Movement / update
-// -------------------------
-function getMoveVector() {
-  let x = 0, y = 0;
-  if (kb['a'] || kb['arrowleft']) x -= 1;
-  if (kb['d'] || kb['arrowright']) x += 1;
-  if (kb['w'] || kb['arrowup']) y -= 1;
-  if (kb['s'] || kb['arrowdown']) y += 1;
-
-  if (pointer.leftStickId !== null) {
-    const max = 60;
-    x += clamp(pointer.leftDX / max, -1, 1);
-    y += clamp(pointer.leftDY / max, -1, 1);
-  }
-  const mag = Math.hypot(x, y);
-  if (mag > 1) { x /= mag; y /= mag; }
-  return { x, y };
-}
-
-function collideWorldCircle(ent) {
-  const L = state.world;
-  ent.x = clamp(ent.x, ent.r, L.world.w - ent.r);
-  ent.y = clamp(ent.y, ent.r, L.world.h - ent.r);
-  for (const o of L.obstacles) {
-    if (!circleHitsRect(ent.x, ent.y, ent.r, o)) continue;
-    const nx = clamp(ent.x, o.x, o.x + o.w);
-    const ny = clamp(ent.y, o.y, o.y + o.h);
-    let dx = ent.x - nx;
-    let dy = ent.y - ny;
-    let d = Math.hypot(dx, dy);
-    if (d === 0) { dx = 1; dy = 0; d = 1; }
-    const push = ent.r - d;
-    if (push > 0) {
-      ent.x += (dx / d) * push;
-      ent.y += (dy / d) * push;
-    }
-  }
-}
-
-function updatePlayer() {
+function updatePlaying() {
   const p = state.player;
-  const mv = getMoveVector();
-  const speed = p.baseSpeed + (p.carTimer > 0 ? 2.6 : 0);
+  const gy = groundY();
 
-  if (p.dashTimer > 0) {
-    p.x += p.dashVX;
-    p.y += p.dashVY;
-    p.dashTimer--;
-    p.attackFlash = 8;
-    for (const e of state.enemies) {
-      if (e.dead) continue;
-      if (dist(p.x, p.y, e.x, e.y) < p.r + e.r + 10) hitEnemy(e, 22, 26, heroes.monko.accent);
+  state.distance += state.speed;
+  state.speed += 0.0015;
+  state.worldIndex = Math.min(2, Math.floor(state.distance / 2400));
+
+  // Jump physics
+  if (p.onGround && state.justPressed) {
+    p.vy = -11.5;
+    p.onGround = false;
+  }
+  if (!p.onGround) {
+    const holding = state.pointerDown && !state.swipeTriggered;
+    const gravity = holding && p.vy < 0 ? 0.38 : 0.62;
+    p.vy += gravity;
+    p.y += p.vy;
+    if (p.y >= gy) {
+      p.y = gy;
+      p.vy = 0;
+      p.onGround = true;
     }
   } else {
-    p.vx += mv.x * 0.9;
-    p.vy += mv.y * 0.9;
-    p.vx *= 0.82;
-    p.vy *= 0.82;
-    p.x += p.vx * speed;
-    p.y += p.vy * speed;
+    p.y = gy;
   }
 
-  if (Math.abs(mv.x) > 0.1) p.facing = mv.x > 0 ? 1 : -1;
-  collideWorldCircle(p);
-
-  if (p.hero === 'brish' && p.carTimer > 0) {
-    for (const e of state.enemies) {
-      if (e.dead) continue;
-      if (dist(p.x, p.y, e.x, e.y) < p.r + e.r + 18) hitEnemy(e, 18, 30, heroes.brish.accent2);
+  // Swipe down special
+  if (state.pointerDown && !state.swipeTriggered) {
+    const dy = state.pointerY - state.pressY;
+    if (dy > 55) {
+      state.swipeTriggered = true;
+      useSpecial();
+      state.tutorialDismissed = true;
     }
-    p.carTimer--;
   }
 
-  if (p.autoCd > 0) p.autoCd--;
-  if (p.powerCd > 0) p.powerCd--;
+  if (p.attackCd > 0) p.attackCd--;
   if (p.specialCd > 0) p.specialCd--;
   if (p.attackFlash > 0) p.attackFlash--;
   if (p.hurt > 0) p.hurt--;
+  if (p.invuln > 0) p.invuln--;
 
-  doAutoAttack();
-  updatePlayerAnim(mv);
-}
+  autoAttack();
 
-function updatePlayerAnim(mv) {
-  const p = state.player;
-  let stateName = 'idle';
-  if (p.attackFlash > 0) stateName = p.hero === 'brish' ? 'punch' : 'magic';
-  else if (Math.hypot(mv.x, mv.y) > 0.15) stateName = 'walk';
-
-  p.animTimer++;
-  const speed = stateName === 'walk' ? 7 : 14;
-  if (p.animTimer >= speed) {
-    p.animTimer = 0;
-    p.animFrame++;
+  // Spawn
+  state.enemyTimer--;
+  state.obstacleTimer--;
+  if (state.enemyTimer <= 0) {
+    spawnEnemy();
+    state.enemyTimer = Math.floor(rand(55, 95) - Math.min(25, state.distance / 450));
   }
-  p.animState = stateName;
-}
+  if (state.obstacleTimer <= 0) {
+    spawnObstacle();
+    state.obstacleTimer = Math.floor(rand(75, 130) - Math.min(35, state.distance / 500));
+  }
 
-function updateEnemies() {
-  const p = state.player;
+  // Enemies
   for (const e of state.enemies) {
     if (e.dead) continue;
-    const dx = p.x - e.x;
-    const dy = p.y - e.y;
-    const d = Math.max(1, Math.hypot(dx, dy));
-    e.vx = dx / d * e.speed;
-    e.vy = dy / d * e.speed;
-    e.x += e.vx;
-    e.y += e.vy;
-    collideWorldCircle(e);
-    if (e.attackCd > 0) e.attackCd--;
+    e.x -= e.speed + state.speed * 0.2;
+    if (e.type === 'hopper') {
+      e.bob += 0.08;
+      e.y += Math.sin(e.bob) * 1.4;
+    }
     if (e.hurt > 0) e.hurt--;
 
-    if (d < p.r + e.r + 6 && e.attackCd <= 0) {
-      p.hp -= e.damage;
-      p.hurt = 12;
-      e.attackCd = 30;
-      burst(p.x, p.y, '#ff5252', 10, 4);
-      screenShake(7);
+    const ex = screenX(e.x);
+    if (ex < -200) e.dead = true;
+    if (dist(ex, e.y, p.x, p.y - 20) < (e.w * 0.5 + 26) && p.invuln <= 0) {
+      p.hp -= e.type === 'tank' ? 16 : 10;
+      p.hurt = 10;
+      p.invuln = 26;
+      burst(p.x, p.y - 40, '#ff5252', 12, 5);
+      shake(8);
+      e.dead = true;
       if (p.hp <= 0) {
+        state.best = Math.max(state.best, Math.floor(state.distance));
         state.scene = 'gameover';
       }
     }
   }
-}
 
-function updateProjectiles() {
+  // Obstacles
+  for (const o of state.obstacles) {
+    if (o.dead) continue;
+    o.x -= state.speed;
+    const ox = screenX(o.x);
+    if (ox < -200) o.dead = true;
+    if (o.type === 'gap') {
+      const playerFootX = p.x + 8;
+      const gapX = ox;
+      if (p.onGround && playerFootX > gapX && playerFootX < gapX + o.w) {
+        p.onGround = false;
+      }
+    } else {
+      const rx = ox;
+      const ry = o.y;
+      const rw = o.w;
+      const rh = o.h;
+      if (p.x + 20 > rx && p.x - 10 < rx + rw && p.y > ry - rh && p.y < ry + 10) {
+        if (p.vy > 0 && p.y < ry - rh / 2) {
+          p.y = ry - rh;
+          p.vy = 0;
+          p.onGround = true;
+        } else if (p.invuln <= 0) {
+          p.hp -= 12;
+          p.hurt = 10;
+          p.invuln = 30;
+          burst(p.x, p.y - 40, '#ff7043', 10, 4);
+          shake(7);
+          if (p.hp <= 0) {
+            state.best = Math.max(state.best, Math.floor(state.distance));
+            state.scene = 'gameover';
+          }
+        }
+      }
+    }
+  }
+
+  // Projectiles
   for (const pr of state.projectiles) {
     pr.x += pr.vx;
     pr.y += pr.vy;
     pr.life--;
     for (const e of state.enemies) {
       if (e.dead) continue;
-      if (dist(pr.x, pr.y, e.x, e.y) < pr.r + e.r) {
-        hitEnemy(e, pr.damage, 16, pr.color);
+      const ex = screenX(e.x);
+      if (dist(ex, e.y - e.h * 0.5, pr.x - state.distance + W() * 0.22, pr.y) < e.w * 0.5 + pr.r) {
+        e.hp -= pr.damage;
+        e.hurt = 8;
         pr.life = 0;
+        burst(pr.x - state.distance + W() * 0.22, pr.y, pr.color, 10, 3.5);
+        if (e.hp <= 0) {
+          e.dead = true;
+          state.score += 14;
+          burst(ex, e.y - e.h * 0.5, pr.color, 14, 4.5);
+        }
         break;
       }
     }
   }
-  state.projectiles = state.projectiles.filter(p => p.life > 0);
-}
+  state.projectiles = state.projectiles.filter(pj => pj.life > 0);
+  state.enemies = state.enemies.filter(e => !e.dead || screenX(e.x) > -150);
+  state.obstacles = state.obstacles.filter(o => !o.dead || screenX(o.x) > -150);
 
-function updateParticles() {
-  for (const p of state.particles) {
-    p.x += p.vx;
-    p.y += p.vy;
-    p.vx *= 0.97;
-    p.vy *= 0.97;
-    p.life--;
+  // Particles
+  for (const prt of state.particles) {
+    prt.x += prt.vx;
+    prt.y += prt.vy;
+    prt.vy += 0.08;
+    prt.vx *= 0.98;
+    prt.life--;
   }
   state.particles = state.particles.filter(p => p.life > 0);
-}
 
-function updateWaves() {
-  if (state.enemies.every(e => e.dead)) {
-    if (state.wave < state.maxWave) {
-      if (state.waveTimer <= 0) {
-        state.wave++;
-        spawnWave(state.wave);
-      } else state.waveTimer--;
-    } else if (state.scene === 'playing') {
-      state.scene = 'win';
-      burst(state.player.x, state.player.y, heroes[state.selectedHero].accent2, 40, 7);
-    }
-  }
-}
-
-function updateCamera() {
-  const p = state.player;
-  const sw = window.innerWidth;
-  const sh = window.innerHeight;
-  state.camera.x = clamp(p.x - sw / 2, 0, state.world.world.w - sw);
-  state.camera.y = clamp(p.y - sh / 2, 0, state.world.world.h - sh);
-  if (state.camera.shake > 0) {
-    state.camera.x += rand(-state.camera.shake, state.camera.shake);
-    state.camera.y += rand(-state.camera.shake, state.camera.shake);
-    state.camera.shake *= 0.82;
-    if (state.camera.shake < 0.4) state.camera.shake = 0;
+  if (state.cameraShake > 0) {
+    state.cameraShake *= 0.82;
+    if (state.cameraShake < 0.5) state.cameraShake = 0;
   }
 }
 
 function update() {
-  state.menuPulse += 0.03;
-
+  state.menuPulse += 0.04;
   if (state.scene === 'menu') {
-    if (pointer.justPressed) handleMenuTap(pointer.x, pointer.y);
+    if (state.justPressed) handleMenuTap(state.pointerX, state.pointerY);
   } else if (state.scene === 'playing') {
-    if (pointer.justPressed) handleTouchButtons(pointer.x, pointer.y);
-    updatePlayer();
-    updateEnemies();
-    updateProjectiles();
-    updateParticles();
-    updateWaves();
-    updateCamera();
+    updatePlaying();
   } else {
-    if (pointer.justPressed) handleEndTap(pointer.x, pointer.y);
-    updateParticles();
-  }
-
-  pointer.justPressed = false;
-  pointer.justReleased = false;
-}
-
-// -------------------------
-// UI hitboxes
-// -------------------------
-function handleMenuTap(x, y) {
-  const W = window.innerWidth;
-  const H = window.innerHeight;
-  const heroY = H * 0.32;
-  const heroW = Math.min(160, W * 0.34);
-  const heroH = 180;
-  const gap = 18;
-  const leftX = W * 0.5 - heroW - gap / 2;
-  const rightX = W * 0.5 + gap / 2;
-  const hero1 = { x: leftX, y: heroY, w: heroW, h: heroH };
-  const hero2 = { x: rightX, y: heroY, w: heroW, h: heroH };
-  if (pointInRect(x, y, hero1)) state.selectedHero = 'brish';
-  if (pointInRect(x, y, hero2)) state.selectedHero = 'monko';
-
-  const ly = H * 0.62;
-  const lw = Math.min(160, W * 0.26);
-  const lh = 64;
-  const total = lw * 3 + 16 * 2;
-  const sx = W * 0.5 - total / 2;
-  for (let i = 0; i < 3; i++) {
-    const r = { x: sx + i * (lw + 16), y: ly, w: lw, h: lh };
-    if (pointInRect(x, y, r)) state.selectedLevel = i;
-  }
-
-  const play = { x: W * 0.5 - 110, y: H * 0.78, w: 220, h: 68 };
-  if (pointInRect(x, y, play)) startGame();
-}
-
-function getTouchButtons() {
-  const W = window.innerWidth, H = window.innerHeight;
-  return {
-    power: { x: W - 108, y: H - 190, r: 40 },
-    special: { x: W - 62, y: H - 108, r: 46 }
-  };
-}
-function handleTouchButtons(x, y) {
-  const btn = getTouchButtons();
-  if (dist(x, y, btn.power.x, btn.power.y) < btn.power.r) usePower();
-  if (dist(x, y, btn.special.x, btn.special.y) < btn.special.r) useSpecial();
-}
-
-function handleEndTap(x, y) {
-  const W = window.innerWidth, H = window.innerHeight;
-  const center = W * 0.5;
-  const primary = { x: center - 110, y: H * 0.72, w: 220, h: 64 };
-  const secondary = { x: center - 110, y: H * 0.82, w: 220, h: 58 };
-  if (pointInRect(x, y, primary)) {
-    if (state.scene === 'win') {
-      state.selectedLevel = (state.selectedLevel + 1) % levels.length;
-      startGame();
-    } else if (state.scene === 'gameover') {
-      startGame();
+    if (state.justPressed) handleEndTap(state.pointerX, state.pointerY);
+    for (const prt of state.particles) {
+      prt.x += prt.vx;
+      prt.y += prt.vy;
+      prt.life--;
     }
+    state.particles = state.particles.filter(p => p.life > 0);
   }
-  if (pointInRect(x, y, secondary)) returnToMenu();
+  state.justPressed = false;
 }
 
-// -------------------------
-// Drawing helpers
-// -------------------------
-function roundedRect(x, y, w, h, r) {
+function drawRoundedRect(x, y, w, h, r) {
   ctx.beginPath();
   ctx.moveTo(x + r, y);
   ctx.arcTo(x + w, y, x + w, y + h, r);
@@ -758,473 +518,537 @@ function roundedRect(x, y, w, h, r) {
   ctx.closePath();
 }
 
-function drawGradientBackground(colors) {
-  const W = window.innerWidth, H = window.innerHeight;
-  const g = ctx.createLinearGradient(0, 0, 0, H);
-  g.addColorStop(0, colors.bg1);
-  g.addColorStop(1, colors.bg2);
+function drawBackground() {
+  const world = WORLDS[state.worldIndex];
+  const g = ctx.createLinearGradient(0, 0, 0, H());
+  g.addColorStop(0, world.sky1);
+  g.addColorStop(1, world.sky2);
   ctx.fillStyle = g;
-  ctx.fillRect(0, 0, W, H);
+  ctx.fillRect(0, 0, W(), H());
 
+  // clouds / themed doodles
   ctx.save();
-  ctx.globalAlpha = 0.25;
-  ctx.strokeStyle = colors.grid;
-  for (let x = -((state.camera.x * 0.25) % 60); x < W + 60; x += 60) {
+  ctx.globalAlpha = 0.23;
+  ctx.strokeStyle = '#fff';
+  ctx.lineWidth = 3;
+  for (let i = 0; i < 6; i++) {
+    const x = (i * 190 - (state.distance * 0.18) % 190);
+    const y = 70 + (i % 3) * 55;
     ctx.beginPath();
-    ctx.moveTo(x, 0);
-    ctx.lineTo(x, H);
+    ctx.arc(x, y, 28, Math.PI * 0.2, Math.PI * 1.7);
     ctx.stroke();
   }
-  for (let y = -((state.camera.y * 0.25) % 60); y < H + 60; y += 60) {
+  ctx.restore();
+
+  if (state.worldIndex === 0) drawLegoDecor(world);
+  if (state.worldIndex === 1) drawBeachDecor(world);
+  if (state.worldIndex === 2) drawMiniDecor(world);
+
+  // ground
+  ctx.fillStyle = world.ground;
+  ctx.fillRect(0, groundY(), W(), H() - groundY());
+  ctx.fillStyle = 'rgba(0,0,0,.08)';
+  for (let i = 0; i < W(); i += 36) {
+    ctx.fillRect((i - (state.distance % 36)), groundY() + 28, 18, 5);
+  }
+}
+
+function drawLegoDecor(world) {
+  ctx.save();
+  ctx.translate(-(state.distance * 0.35) % 180, 0);
+  for (let i = 0; i < 9; i++) {
+    const x = 80 + i * 180;
+    const h = 100 + (i % 3) * 28;
+    ctx.fillStyle = i % 2 ? world.decor1 : world.decor2;
+    ctx.fillRect(x, groundY() - h, 70, h);
+    ctx.fillStyle = 'rgba(255,255,255,.4)';
+    for (let r = 0; r < 2; r++) {
+      ctx.beginPath(); ctx.arc(x + 20 + r * 25, groundY() - h + 18, 6, 0, TAU); ctx.fill();
+    }
+  }
+  ctx.restore();
+}
+
+function drawBeachDecor(world) {
+  ctx.save();
+  ctx.translate(-(state.distance * 0.28) % 220, 0);
+  ctx.fillStyle = world.decor1;
+  ctx.fillRect(0, groundY() - 40, W() + 260, 28);
+  ctx.strokeStyle = '#fff';
+  ctx.lineWidth = 4;
+  for (let i = 0; i < 9; i++) {
     ctx.beginPath();
-    ctx.moveTo(0, y);
-    ctx.lineTo(W, y);
+    ctx.arc(i * 170 + 40, groundY() - 26, 28, Math.PI * 1.05, Math.PI * 1.95);
     ctx.stroke();
   }
   ctx.restore();
 }
 
-function drawWorld() {
-  const L = state.world;
-  drawGradientBackground(L.colors);
-  const W = window.innerWidth, H = window.innerHeight;
-
-  // floor panel
-  ctx.fillStyle = L.colors.floor;
-  ctx.fillRect(-state.camera.x, -state.camera.y, L.world.w, L.world.h);
-
-  // subtle pattern blobs
+function drawMiniDecor(world) {
   ctx.save();
-  ctx.globalAlpha = 0.13;
-  ctx.fillStyle = L.colors.floor2;
-  for (let i = 0; i < 12; i++) {
-    const x = ((i * 170) % L.world.w) - state.camera.x;
-    const y = ((i * 240 + 80) % L.world.h) - state.camera.y;
-    ctx.beginPath();
-    ctx.arc(x, y, 120 + (i % 3) * 24, 0, TAU);
-    ctx.fill();
-  }
-  ctx.restore();
-
-  // obstacles
-  for (const o of L.obstacles) {
-    const s = worldToScreen(o.x, o.y);
-    ctx.fillStyle = L.colors.obstacle;
-    roundedRect(s.x, s.y, o.w, o.h, 22);
-    ctx.fill();
-    ctx.fillStyle = 'rgba(255,255,255,.14)';
-    roundedRect(s.x + 6, s.y + 6, o.w - 12, 20, 12);
-    ctx.fill();
-    ctx.strokeStyle = 'rgba(0,0,0,.18)';
-    ctx.lineWidth = 3;
-    roundedRect(s.x, s.y, o.w, o.h, 22);
-    ctx.stroke();
-  }
-}
-
-function drawPlayerSprite() {
-  const p = state.player;
-  const s = worldToScreen(p.x, p.y);
-  const shadowY = p.carTimer > 0 ? 26 : 18;
-
-  // shadow
-  ctx.fillStyle = 'rgba(0,0,0,.22)';
+  ctx.translate(-(state.distance * 0.18) % 260, 0);
+  ctx.strokeStyle = world.decor2;
+  ctx.lineWidth = 3;
   ctx.beginPath();
-  ctx.ellipse(s.x, s.y + shadowY, p.carTimer > 0 ? 42 : 26, p.carTimer > 0 ? 16 : 12, 0, 0, TAU);
-  ctx.fill();
-
-  if (p.carTimer > 0) {
-    const car = p.hero === 'brish' ? assets.brishCar : assets.monkoCar;
-    if (car && car.complete && car.naturalWidth) {
-      ctx.save();
-      if (p.facing < 0) {
-        ctx.translate(s.x, 0); ctx.scale(-1, 1);
-        ctx.drawImage(car, -46, s.y - 34, 92, 58);
-      } else {
-        ctx.drawImage(car, s.x - 46, s.y - 34, 92, 58);
-      }
-      ctx.restore();
-    }
-    return;
-  }
-
-  // attack flash
-  if (p.attackFlash > 0) {
-    ctx.fillStyle = (p.hero === 'brish' ? 'rgba(255,138,101,.24)' : 'rgba(171,71,188,.22)');
+  ctx.moveTo(50, 96);
+  ctx.bezierCurveTo(130, 40, 220, 150, 320, 82);
+  ctx.bezierCurveTo(420, 30, 520, 120, 650, 52);
+  ctx.stroke();
+  for (let i = 0; i < 10; i++) {
+    const x = 70 + i * 120;
+    const y = groundY() + 10 + (i % 2) * 8;
+    ctx.strokeStyle = '#3e2723';
     ctx.beginPath();
-    ctx.arc(s.x, s.y - 12, 48 + Math.sin(p.attackFlash) * 6, 0, TAU);
-    ctx.fill();
-  }
-
-  const drawW = 76, drawH = 102;
-
-  if (p.hero === 'brish' && assets.brishStrip.complete && assets.brishStrip.naturalWidth) {
-    const anim = p.animState === 'walk' ? [1,2,3,2] : p.animState === 'punch' ? [6,7] : [0];
-    const frame = anim[Math.floor(p.animFrame / 1) % anim.length];
-    ctx.save();
-    if (p.facing < 0) {
-      ctx.translate(s.x, 0); ctx.scale(-1, 1);
-      ctx.drawImage(assets.brishStrip, frame * 320, 0, 320, 426, -drawW / 2, s.y - 80, drawW, drawH);
-    } else {
-      ctx.drawImage(assets.brishStrip, frame * 320, 0, 320, 426, s.x - drawW / 2, s.y - 80, drawW, drawH);
-    }
-    ctx.restore();
-  } else if (p.hero === 'monko' && assets.monkoStrip.complete && assets.monkoStrip.naturalWidth) {
-    const anim = p.animState === 'walk' ? [1,2,3,2] : p.animState === 'magic' ? [6,7] : [0];
-    const frame = anim[Math.floor(p.animFrame / 1) % anim.length];
-    ctx.save();
-    if (p.facing < 0) {
-      ctx.translate(s.x, 0); ctx.scale(-1, 1);
-      ctx.drawImage(assets.monkoStrip, frame * 320, 0, 320, 426, -drawW / 2, s.y - 80, drawW, drawH);
-    } else {
-      ctx.drawImage(assets.monkoStrip, frame * 320, 0, 320, 426, s.x - drawW / 2, s.y - 80, drawW, drawH);
-    }
-    ctx.restore();
-  } else {
-    const img = p.hero === 'brish' ? assets.brish : assets.monko;
-    if (img && img.complete) {
-      ctx.save();
-      if (p.facing < 0) {
-        ctx.translate(s.x, 0); ctx.scale(-1, 1);
-        ctx.drawImage(img, -drawW / 2, s.y - 80, drawW, drawH);
-      } else {
-        ctx.drawImage(img, s.x - drawW / 2, s.y - 80, drawW, drawH);
-      }
-      ctx.restore();
-    }
-  }
-
-  if (p.hurt > 0) {
-    ctx.strokeStyle = 'rgba(255,82,82,.9)';
-    ctx.lineWidth = 4;
-    ctx.beginPath();
-    ctx.arc(s.x, s.y - 12, 40, 0, TAU);
+    ctx.arc(x, y - 14, 5, 0, TAU);
+    ctx.moveTo(x, y - 9); ctx.lineTo(x, y + 12);
+    ctx.moveTo(x - 9, y - 2); ctx.lineTo(x + 9, y - 1);
+    ctx.moveTo(x, y + 12); ctx.lineTo(x - 7, y + 23);
+    ctx.moveTo(x, y + 12); ctx.lineTo(x + 7, y + 23);
     ctx.stroke();
+  }
+  ctx.restore();
+}
+
+function drawObstacles() {
+  const world = WORLDS[state.worldIndex];
+  for (const o of state.obstacles) {
+    const x = screenX(o.x);
+    if (o.type === 'gap') {
+      ctx.fillStyle = '#0b0f1a';
+      ctx.fillRect(x, groundY(), o.w, H() - groundY());
+      continue;
+    }
+    ctx.fillStyle = o.color || world.decor1;
+    drawRoundedRect(x, o.y - o.h, o.w, o.h, 14);
+    ctx.fill();
+    ctx.fillStyle = 'rgba(255,255,255,.16)';
+    drawRoundedRect(x + 4, o.y - o.h + 4, o.w - 8, 16, 10);
+    ctx.fill();
   }
 }
 
 function drawEnemies() {
   for (const e of state.enemies) {
     if (e.dead) continue;
-    const s = worldToScreen(e.x, e.y);
-    ctx.fillStyle = 'rgba(0,0,0,.22)';
+    const x = screenX(e.x);
+    const y = e.y - e.h;
+    ctx.fillStyle = 'rgba(0,0,0,.18)';
     ctx.beginPath();
-    ctx.ellipse(s.x, s.y + e.r * 0.85, e.r * 0.8, e.r * 0.45, 0, 0, TAU);
+    ctx.ellipse(x + e.w / 2, e.y + 6, e.w * 0.35, 8, 0, 0, TAU);
     ctx.fill();
 
     ctx.fillStyle = e.color;
     ctx.beginPath();
-    ctx.arc(s.x, s.y, e.r, 0, TAU);
+    ctx.arc(x + e.w / 2, y + e.h / 2, e.w / 2, 0, TAU);
     ctx.fill();
-    ctx.fillStyle = 'rgba(255,255,255,.25)';
+    ctx.fillStyle = 'rgba(255,255,255,.34)';
     ctx.beginPath();
-    ctx.arc(s.x - e.r * 0.35, s.y - e.r * 0.35, e.r * 0.35, 0, TAU);
+    ctx.arc(x + e.w * 0.32, y + e.h * 0.28, 8, 0, TAU);
     ctx.fill();
 
-    // eyes
     ctx.fillStyle = '#fff';
-    ctx.beginPath(); ctx.arc(s.x - e.r*0.35, s.y - 4, 4, 0, TAU); ctx.fill();
-    ctx.beginPath(); ctx.arc(s.x + e.r*0.15, s.y - 4, 4, 0, TAU); ctx.fill();
-    ctx.fillStyle = '#111';
-    ctx.beginPath(); ctx.arc(s.x - e.r*0.28, s.y - 3, 2, 0, TAU); ctx.fill();
-    ctx.beginPath(); ctx.arc(s.x + e.r*0.22, s.y - 3, 2, 0, TAU); ctx.fill();
+    ctx.fillRect(x + e.w * 0.22, y + e.h * 0.32, 6, 5);
+    ctx.fillRect(x + e.w * 0.58, y + e.h * 0.32, 6, 5);
+    ctx.fillStyle = '#000';
+    ctx.fillRect(x + e.w * 0.25, y + e.h * 0.35, 3, 3);
+    ctx.fillRect(x + e.w * 0.61, y + e.h * 0.35, 3, 3);
+
+    ctx.fillStyle = 'rgba(0,0,0,.35)';
+    drawRoundedRect(x - 4, y - 12, e.w + 8, 6, 4); ctx.fill();
+    ctx.fillStyle = '#22c55e';
+    drawRoundedRect(x - 4, y - 12, (e.w + 8) * (e.hp / e.maxHp), 6, 4); ctx.fill();
 
     if (e.hurt > 0) {
       ctx.strokeStyle = '#fff';
       ctx.lineWidth = 3;
       ctx.beginPath();
-      ctx.arc(s.x, s.y, e.r + 4, 0, TAU);
+      ctx.arc(x + e.w / 2, y + e.h / 2, e.w / 2 + 5, 0, TAU);
       ctx.stroke();
     }
-
-    // hp bar
-    ctx.fillStyle = 'rgba(0,0,0,.4)';
-    roundedRect(s.x - 22, s.y - e.r - 18, 44, 6, 4); ctx.fill();
-    ctx.fillStyle = '#22c55e';
-    roundedRect(s.x - 22, s.y - e.r - 18, 44 * (e.hp / e.maxHp), 6, 4); ctx.fill();
   }
 }
 
 function drawProjectiles() {
-  for (const p of state.projectiles) {
-    const s = worldToScreen(p.x, p.y);
-    ctx.fillStyle = p.color;
+  for (const pr of state.projectiles) {
+    const x = pr.x - state.distance + W() * 0.22;
+    const y = pr.y;
+    ctx.fillStyle = pr.color;
     ctx.beginPath();
-    ctx.arc(s.x, s.y, p.r, 0, TAU);
+    ctx.arc(x, y, pr.r, 0, TAU);
     ctx.fill();
-    ctx.fillStyle = 'rgba(255,255,255,.45)';
+    ctx.fillStyle = 'rgba(255,255,255,.4)';
     ctx.beginPath();
-    ctx.arc(s.x - 2, s.y - 2, p.r * 0.45, 0, TAU);
+    ctx.arc(x - 2, y - 2, pr.r * 0.42, 0, TAU);
     ctx.fill();
   }
 }
 
 function drawParticles() {
-  for (const p of state.particles) {
-    const s = worldToScreen(p.x, p.y);
-    ctx.globalAlpha = clamp(p.life / 30, 0, 1);
-    ctx.fillStyle = p.color;
-    ctx.fillRect(s.x, s.y, p.size, p.size);
+  for (const prt of state.particles) {
+    ctx.globalAlpha = clamp(prt.life / 30, 0, 1);
+    ctx.fillStyle = prt.color;
+    ctx.fillRect(prt.x, prt.y, prt.size, prt.size);
   }
   ctx.globalAlpha = 1;
 }
 
-function drawHUD() {
+function drawPlayer() {
   const p = state.player;
-  const hero = heroes[p.hero];
-  const W = window.innerWidth;
-  const H = window.innerHeight;
+  let x = p.x;
+  let y = p.y - p.h + 6;
+  if (state.cameraShake > 0) {
+    x += rand(-state.cameraShake, state.cameraShake);
+    y += rand(-state.cameraShake, state.cameraShake);
+  }
 
-  // top bars
-  ctx.fillStyle = 'rgba(0,0,0,.32)';
-  roundedRect(14, 14, W - 28, 74, 22); ctx.fill();
+  ctx.fillStyle = 'rgba(0,0,0,.18)';
+  ctx.beginPath();
+  ctx.ellipse(x + p.w / 2, groundY() + 10, p.w * 0.3, 10, 0, 0, TAU);
+  ctx.fill();
 
-  ctx.fillStyle = '#fff';
-  ctx.font = '700 20px Fredoka';
-  ctx.fillText(`${levels[state.selectedLevel].emoji} ${state.world.name}`, 28, 40);
-  ctx.font = '600 14px Fredoka';
-  ctx.fillStyle = 'rgba(255,255,255,.8)';
-  ctx.fillText(`${hero.name} • Wave ${state.wave}/${state.maxWave} • Score ${state.score}`, 28, 64);
+  if (p.attackFlash > 0) {
+    ctx.fillStyle = state.hero === 'brish' ? 'rgba(255,138,101,.2)' : 'rgba(171,71,188,.22)';
+    ctx.beginPath();
+    ctx.arc(x + p.w / 2, y + p.h / 2, 48, 0, TAU);
+    ctx.fill();
+  }
 
-  // hp
-  const barX = 22, barY = 94, barW = W - 44;
-  ctx.fillStyle = 'rgba(255,255,255,.12)';
-  roundedRect(barX, barY, barW, 18, 10); ctx.fill();
-  ctx.fillStyle = hero.accent;
-  roundedRect(barX, barY, barW * (p.hp / p.maxHp), 18, 10); ctx.fill();
-  ctx.fillStyle = '#fff';
-  ctx.font = '700 12px Fredoka';
-  ctx.fillText(`${Math.max(0, Math.ceil(p.hp))}/${p.maxHp}`, barX + 8, barY + 13);
+  const anim = heroAnim(state.hero, p);
+  const frame = anim[Math.floor(p.animFrame / 1) % anim.length];
+  const strip = state.hero === 'brish' ? images.brishStrip : images.monkoStrip;
 
-  // touch controls visual
-  drawTouchUI(hero);
+  if (strip && strip.complete && strip.naturalWidth) {
+    ctx.save();
+    ctx.drawImage(strip, frame * 320, 0, 320, 426, x, y, p.w, p.h);
+    ctx.restore();
+  } else {
+    const fallback = state.hero === 'brish' ? images.brish : images.monko;
+    if (fallback && fallback.complete) ctx.drawImage(fallback, x, y, p.w, p.h);
+  }
 
-  // tutorial
-  if (!state.tutorialSeen) {
-    ctx.fillStyle = 'rgba(0,0,0,.42)';
-    roundedRect(W*0.5 - 170, 126, 340, 96, 18); ctx.fill();
-    ctx.fillStyle = '#fff';
-    ctx.font = '700 18px Fredoka';
-    ctx.fillText('Drag left thumb to move', W*0.5 - 128, 160);
-    ctx.font = '600 15px Fredoka';
-    ctx.fillText('Tap right buttons for powers', W*0.5 - 114, 186);
-    ctx.fillText('Auto-attacks fire by themselves', W*0.5 - 122, 208);
+  if (p.hurt > 0) {
+    ctx.strokeStyle = 'rgba(255,82,82,.8)';
+    ctx.lineWidth = 4;
+    ctx.beginPath();
+    ctx.arc(x + p.w / 2, y + p.h / 2, 42, 0, TAU);
+    ctx.stroke();
+  }
+
+  p.animTimer++;
+  const animSpeed = !p.onGround || state.speed > 6.5 ? 7 : 12;
+  if (p.animTimer >= animSpeed) {
+    p.animTimer = 0;
+    p.animFrame++;
   }
 }
 
-function drawTouchUI(hero) {
-  const W = window.innerWidth, H = window.innerHeight;
-  const leftBaseX = pointer.leftStickId !== null ? pointer.leftStartX : 88;
-  const leftBaseY = pointer.leftStickId !== null ? pointer.leftStartY : H - 104;
+function drawHUD() {
+  const p = state.player;
+  const hero = HEROES[state.hero];
+  const world = WORLDS[state.worldIndex];
 
-  // joystick base
-  ctx.fillStyle = 'rgba(255,255,255,.08)';
-  ctx.beginPath(); ctx.arc(leftBaseX, leftBaseY, 48, 0, TAU); ctx.fill();
-  const knobX = leftBaseX + clamp(pointer.leftDX, -28, 28);
-  const knobY = leftBaseY + clamp(pointer.leftDY, -28, 28);
-  ctx.fillStyle = 'rgba(255,255,255,.2)';
-  ctx.beginPath(); ctx.arc(knobX, knobY, 26, 0, TAU); ctx.fill();
-
-  // action buttons
-  const btn = getTouchButtons();
-  const powerReady = state.player.powerCd <= 0;
-  const specReady = state.player.specialCd <= 0;
-
-  ctx.fillStyle = powerReady ? hero.accent : 'rgba(255,255,255,.18)';
-  ctx.beginPath(); ctx.arc(btn.power.x, btn.power.y, btn.power.r, 0, TAU); ctx.fill();
+  ctx.fillStyle = 'rgba(0,0,0,.28)';
+  drawRoundedRect(14, 14, W() - 28, 76, 20); ctx.fill();
   ctx.fillStyle = '#fff';
-  ctx.font = '700 15px Fredoka';
-  ctx.textAlign = 'center';
-  ctx.fillText('PWR', btn.power.x, btn.power.y + 5);
+  ctx.font = '700 20px Fredoka';
+  ctx.fillText(`${world.emoji} ${world.name}`, 28, 38);
+  ctx.font = '600 14px Fredoka';
+  ctx.fillStyle = 'rgba(255,255,255,.85)';
+  ctx.fillText(`${hero.name} • ${Math.floor(state.distance)}m • Score ${state.score}`, 28, 62);
 
-  ctx.fillStyle = specReady ? hero.accent2 : 'rgba(255,255,255,.18)';
-  ctx.beginPath(); ctx.arc(btn.special.x, btn.special.y, btn.special.r, 0, TAU); ctx.fill();
-  ctx.fillStyle = '#fff';
-  ctx.fillText('ULT', btn.special.x, btn.special.y + 5);
-  ctx.textAlign = 'left';
+  const barX = 20, barY = 98, barW = W() - 40;
+  ctx.fillStyle = 'rgba(255,255,255,.12)';
+  drawRoundedRect(barX, barY, barW, 16, 8); ctx.fill();
+  ctx.fillStyle = hero.color;
+  drawRoundedRect(barX, barY, barW * (p.hp / p.maxHp), 16, 8); ctx.fill();
 
-  // cooldown rings
-  if (!powerReady) drawCooldownRing(btn.power.x, btn.power.y, btn.power.r, state.player.powerCd / (state.player.hero === 'brish' ? 180 : 140));
-  if (!specReady) drawCooldownRing(btn.special.x, btn.special.y, btn.special.r, state.player.specialCd / (state.player.hero === 'brish' ? 420 : 300));
+  drawButtons(hero);
+
+  if (!state.tutorialDismissed) {
+    ctx.fillStyle = 'rgba(0,0,0,.4)';
+    drawRoundedRect(W() * 0.5 - 175, 126, 350, 96, 18); ctx.fill();
+    ctx.fillStyle = '#fff';
+    ctx.textAlign = 'center';
+    ctx.font = '700 18px Fredoka';
+    ctx.fillText('Hold to jump higher', W() * 0.5, 156);
+    ctx.font = '600 15px Fredoka';
+    ctx.fillText('Swipe down for special', W() * 0.5, 184);
+    ctx.fillText('Basic attacks happen automatically', W() * 0.5, 206);
+    ctx.textAlign = 'left';
+  }
 }
 
-function drawCooldownRing(x, y, r, pct) {
-  ctx.strokeStyle = 'rgba(0,0,0,.45)';
-  ctx.lineWidth = 8;
-  ctx.beginPath();
-  ctx.arc(x, y, r - 4, -Math.PI / 2, -Math.PI / 2 + TAU * pct, false);
-  ctx.stroke();
+function drawButtons(hero) {
+  const p = state.player;
+  const power = { x: W() - 102, y: H() - 182, r: 42 };
+  const ult = { x: W() - 60, y: H() - 96, r: 48 };
+  state.ui.power = power;
+  state.ui.ult = ult;
+
+  ctx.fillStyle = p.attackCd <= 0 ? hero.color : 'rgba(255,255,255,.18)';
+  ctx.beginPath(); ctx.arc(power.x, power.y, power.r, 0, TAU); ctx.fill();
+  ctx.fillStyle = '#fff'; ctx.textAlign = 'center'; ctx.font = '700 16px Fredoka';
+  ctx.fillText('ATK', power.x, power.y + 5);
+
+  ctx.fillStyle = p.specialCd <= 0 ? hero.color2 : 'rgba(255,255,255,.18)';
+  ctx.beginPath(); ctx.arc(ult.x, ult.y, ult.r, 0, TAU); ctx.fill();
+  ctx.fillStyle = '#fff'; ctx.font = '700 16px Fredoka';
+  ctx.fillText('ULT', ult.x, ult.y + 5);
+  ctx.textAlign = 'left';
+
+  if (p.specialCd > 0) {
+    ctx.strokeStyle = 'rgba(0,0,0,.45)';
+    ctx.lineWidth = 8;
+    ctx.beginPath();
+    ctx.arc(ult.x, ult.y, ult.r - 4, -Math.PI / 2, -Math.PI / 2 + TAU * (p.specialCd / (state.hero === 'brish' ? 260 : 220)), false);
+    ctx.stroke();
+  }
 }
 
 function drawMenu() {
-  const W = window.innerWidth, H = window.innerHeight;
-  drawGradientBackground({ bg1: '#0b1021', bg2: '#22114d', grid: 'rgba(255,255,255,.06)' });
+  const g = ctx.createLinearGradient(0, 0, 0, H());
+  g.addColorStop(0, '#120c26');
+  g.addColorStop(1, '#2b174f');
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, W(), H());
 
-  // glow blobs
   ctx.save();
-  ctx.globalAlpha = 0.35;
+  ctx.globalAlpha = 0.28;
   const pulse = (Math.sin(state.menuPulse) + 1) * 0.5;
-  const g1 = ctx.createRadialGradient(W*0.25, H*0.2, 20, W*0.25, H*0.2, 240 + pulse*20);
-  g1.addColorStop(0, 'rgba(124,77,255,.6)'); g1.addColorStop(1, 'rgba(124,77,255,0)');
-  ctx.fillStyle = g1; ctx.fillRect(0,0,W,H);
-  const g2 = ctx.createRadialGradient(W*0.75, H*0.75, 20, W*0.75, H*0.75, 240 + pulse*15);
-  g2.addColorStop(0, 'rgba(255,138,101,.55)'); g2.addColorStop(1, 'rgba(255,138,101,0)');
-  ctx.fillStyle = g2; ctx.fillRect(0,0,W,H);
+  const glow1 = ctx.createRadialGradient(W()*0.25, H()*0.22, 10, W()*0.25, H()*0.22, 220 + pulse * 30);
+  glow1.addColorStop(0, 'rgba(255,138,101,.8)'); glow1.addColorStop(1, 'rgba(255,138,101,0)');
+  ctx.fillStyle = glow1; ctx.fillRect(0,0,W(),H());
+  const glow2 = ctx.createRadialGradient(W()*0.75, H()*0.7, 10, W()*0.75, H()*0.7, 220 + pulse * 30);
+  glow2.addColorStop(0, 'rgba(124,77,255,.8)'); glow2.addColorStop(1, 'rgba(124,77,255,0)');
+  ctx.fillStyle = glow2; ctx.fillRect(0,0,W(),H());
   ctx.restore();
 
   ctx.fillStyle = '#fff';
   ctx.textAlign = 'center';
-  ctx.font = `700 ${Math.min(52, W*0.12)}px Fredoka`;
-  ctx.fillText('Brish & Monko', W*0.5, H*0.14);
-  ctx.font = `600 ${Math.min(22, W*0.05)}px Fredoka`;
-  ctx.fillStyle = 'rgba(255,255,255,.78)';
-  ctx.fillText('mobile action adventure', W*0.5, H*0.19);
+  ctx.font = `700 ${Math.min(54, W() * 0.12)}px Fredoka`;
+  ctx.fillText('Smash & Bloom', W() * 0.5, H() * 0.14);
+  ctx.font = `600 ${Math.min(20, W() * 0.05)}px Fredoka`;
+  ctx.fillStyle = 'rgba(255,255,255,.8)';
+  ctx.fillText('Brish & Monko endless runner', W() * 0.5, H() * 0.19);
 
-  // hero cards
-  const heroY = H * 0.32;
-  const heroW = Math.min(170, W * 0.36);
-  const heroH = 190;
-  const gap = 18;
-  const leftX = W * 0.5 - heroW - gap / 2;
-  const rightX = W * 0.5 + gap / 2;
-  drawHeroCard(leftX, heroY, heroW, heroH, 'brish');
-  drawHeroCard(rightX, heroY, heroW, heroH, 'monko');
+  drawMenuHeroCard(W()*0.5 - 178, H()*0.28, 160, 196, 'brish');
+  drawMenuHeroCard(W()*0.5 + 18, H()*0.28, 160, 196, 'monko');
 
-  // level buttons
-  const ly = H * 0.62;
-  const lw = Math.min(160, W * 0.26);
-  const lh = 64;
-  const total = lw * 3 + 16 * 2;
-  const sx = W * 0.5 - total / 2;
+  const total = 3 * 112 + 2 * 14;
+  const startX = W() * 0.5 - total / 2;
   for (let i = 0; i < 3; i++) {
-    const selected = state.selectedLevel === i;
-    roundedRect(sx + i*(lw+16), ly, lw, lh, 18);
-    ctx.fillStyle = selected ? 'rgba(124,77,255,.28)' : 'rgba(255,255,255,.08)';
+    const x = startX + i * 126;
+    const y = H() * 0.61;
+    drawRoundedRect(x, y, 112, 62, 16);
+    ctx.fillStyle = state.worldIndex === i ? 'rgba(124,77,255,.25)' : 'rgba(255,255,255,.08)';
     ctx.fill();
-    ctx.strokeStyle = selected ? '#8b5cf6' : 'rgba(255,255,255,.12)';
+    ctx.strokeStyle = state.worldIndex === i ? '#8b5cf6' : 'rgba(255,255,255,.14)';
     ctx.lineWidth = 2; ctx.stroke();
     ctx.fillStyle = '#fff';
     ctx.font = '700 18px Fredoka';
-    ctx.fillText(levels[i].emoji, sx + i*(lw+16) + lw/2, ly + 24);
-    ctx.font = '600 14px Fredoka';
-    ctx.fillText(levels[i].name, sx + i*(lw+16) + lw/2, ly + 46);
+    ctx.fillText(WORLDS[i].emoji, x + 56, y + 22);
+    ctx.font = '600 12px Fredoka';
+    ctx.fillText(WORLDS[i].name, x + 56, y + 44);
   }
 
-  // play button
-  const play = { x: W*0.5 - 110, y: H*0.78, w: 220, h: 68 };
-  roundedRect(play.x, play.y, play.w, play.h, 20);
-  const g = ctx.createLinearGradient(play.x, play.y, play.x, play.y + play.h);
-  g.addColorStop(0, '#8b5cf6'); g.addColorStop(1, '#6d28d9');
-  ctx.fillStyle = g; ctx.fill();
+  const play = { x: W()*0.5 - 118, y: H()*0.79, w: 236, h: 70 };
+  state.ui.menuPlay = play;
+  drawRoundedRect(play.x, play.y, play.w, play.h, 20);
+  const pg = ctx.createLinearGradient(play.x, play.y, play.x, play.y + play.h);
+  pg.addColorStop(0, '#8b5cf6'); pg.addColorStop(1, '#6d28d9');
+  ctx.fillStyle = pg; ctx.fill();
   ctx.fillStyle = '#fff';
   ctx.font = '700 28px Fredoka';
-  ctx.fillText('PLAY', W*0.5, play.y + 43);
+  ctx.fillText('PLAY', W() * 0.5, play.y + 44);
 
   ctx.font = '600 14px Fredoka';
-  ctx.fillStyle = 'rgba(255,255,255,.74)';
-  ctx.fillText('Modern top-down action • auto attacks • powers • cars', W*0.5, H*0.92);
+  ctx.fillStyle = 'rgba(255,255,255,.75)';
+  ctx.fillText('One-touch jumps • auto-combat • swipe special', W()*0.5, H()*0.92);
   ctx.textAlign = 'left';
 }
 
-function drawHeroCard(x, y, w, h, heroKey) {
-  const hero = heroes[heroKey];
-  const selected = state.selectedHero === heroKey;
-  roundedRect(x, y, w, h, 24);
+function drawMenuHeroCard(x, y, w, h, heroKey) {
+  const selected = state.hero === heroKey;
+  const hero = HEROES[heroKey];
+  drawRoundedRect(x, y, w, h, 22);
   ctx.fillStyle = selected ? 'rgba(124,77,255,.22)' : 'rgba(255,255,255,.08)';
   ctx.fill();
-  ctx.strokeStyle = selected ? hero.accent : 'rgba(255,255,255,.14)';
+  ctx.strokeStyle = selected ? hero.color : 'rgba(255,255,255,.14)';
   ctx.lineWidth = 3; ctx.stroke();
 
-  const art = heroKey === 'brish' ? (assets.brishStrip.complete ? assets.brishStrip : assets.brish) : (assets.monkoStrip.complete ? assets.monkoStrip : assets.monko);
-  if (art && art.complete && art.naturalWidth) {
-    if (heroKey === 'brish' && assets.brishStrip.complete && assets.brishStrip.naturalWidth) {
-      ctx.drawImage(assets.brishStrip, 0, 0, 320, 426, x + w/2 - 36, y + 20, 72, 96);
-    } else if (heroKey === 'monko' && assets.monkoStrip.complete && assets.monkoStrip.naturalWidth) {
-      ctx.drawImage(assets.monkoStrip, 0, 0, 320, 426, x + w/2 - 36, y + 20, 72, 96);
-    } else {
-      ctx.drawImage(art, x + w/2 - 34, y + 20, 68, 96);
-    }
+  if (heroKey === 'brish' && images.brishStrip.complete && images.brishStrip.naturalWidth) {
+    ctx.drawImage(images.brishStrip, 0, 0, 320, 426, x + 42, y + 12, 76, 100);
+  } else if (heroKey === 'monko' && images.monkoStrip.complete && images.monkoStrip.naturalWidth) {
+    ctx.drawImage(images.monkoStrip, 0, 0, 320, 426, x + 42, y + 12, 76, 100);
   }
 
   ctx.fillStyle = '#fff';
   ctx.textAlign = 'center';
-  ctx.font = '700 24px Fredoka';
-  ctx.fillText(hero.name, x + w/2, y + 138);
+  ctx.font = '700 22px Fredoka';
+  ctx.fillText(hero.name, x + w / 2, y + 134);
   ctx.font = '600 14px Fredoka';
   ctx.fillStyle = 'rgba(255,255,255,.8)';
-  ctx.fillText(hero.powerLabel, x + w/2, y + 162);
-  ctx.fillText(hero.specialLabel, x + w/2, y + 182);
+  ctx.fillText(hero.specialName, x + w / 2, y + 160);
+  ctx.fillText(heroKey === 'brish' ? 'Punch brawler' : 'Magic runner', x + w / 2, y + 180);
   ctx.textAlign = 'left';
 }
 
-function drawEndScreen(kind) {
-  drawWorld();
+function drawEnd(kind) {
+  drawBackground();
+  drawObstacles();
   drawEnemies();
   drawProjectiles();
-  drawPlayerSprite();
+  drawPlayer();
   drawParticles();
 
-  const W = window.innerWidth, H = window.innerHeight;
   ctx.fillStyle = 'rgba(0,0,0,.55)';
-  ctx.fillRect(0, 0, W, H);
+  ctx.fillRect(0, 0, W(), H());
 
-  roundedRect(W*0.5 - 180, H*0.28, 360, 250, 28);
-  ctx.fillStyle = 'rgba(15,15,35,.92)';
-  ctx.fill();
+  const panel = { x: W()*0.5 - 180, y: H()*0.3, w: 360, h: 250 };
+  drawRoundedRect(panel.x, panel.y, panel.w, panel.h, 26);
+  ctx.fillStyle = 'rgba(16,10,26,.94)'; ctx.fill();
   ctx.strokeStyle = kind === 'win' ? '#8b5cf6' : '#ef4444';
   ctx.lineWidth = 3; ctx.stroke();
 
   ctx.textAlign = 'center';
   ctx.fillStyle = '#fff';
-  ctx.font = '700 40px Fredoka';
-  ctx.fillText(kind === 'win' ? 'Level Clear!' : 'Game Over', W*0.5, H*0.37);
+  ctx.font = '700 38px Fredoka';
+  ctx.fillText(kind === 'win' ? 'Great Run!' : 'Out of Juice!', W()*0.5, H()*0.39);
   ctx.font = '600 18px Fredoka';
   ctx.fillStyle = 'rgba(255,255,255,.82)';
-  ctx.fillText(kind === 'win' ? `Score ${state.score} • Next world ready` : `Score ${state.score} • Try a different hero`, W*0.5, H*0.415);
+  ctx.fillText(`${Math.floor(state.distance)}m • Score ${state.score} • Best ${Math.max(state.best, Math.floor(state.distance))}m`, W()*0.5, H()*0.435);
 
-  const primary = { x: W*0.5 - 110, y: H*0.49, w: 220, h: 64 };
-  const secondary = { x: W*0.5 - 110, y: H*0.58, w: 220, h: 58 };
-  roundedRect(primary.x, primary.y, primary.w, primary.h, 18);
-  ctx.fillStyle = kind === 'win' ? '#7c4dff' : '#ef4444';
-  ctx.fill();
-  roundedRect(secondary.x, secondary.y, secondary.w, secondary.h, 18);
-  ctx.fillStyle = 'rgba(255,255,255,.12)';
-  ctx.fill();
-
+  const retry = { x: W()*0.5 - 110, y: H()*0.51, w: 220, h: 64 };
+  const menu = { x: W()*0.5 - 110, y: H()*0.6, w: 220, h: 56 };
+  state.ui.endRetry = retry;
+  state.ui.endMenu = menu;
+  drawRoundedRect(retry.x, retry.y, retry.w, retry.h, 18);
+  ctx.fillStyle = kind === 'win' ? '#7c4dff' : '#ef4444'; ctx.fill();
+  drawRoundedRect(menu.x, menu.y, menu.w, menu.h, 18);
+  ctx.fillStyle = 'rgba(255,255,255,.12)'; ctx.fill();
   ctx.fillStyle = '#fff';
   ctx.font = '700 24px Fredoka';
-  ctx.fillText(kind === 'win' ? 'NEXT' : 'RETRY', W*0.5, primary.y + 40);
+  ctx.fillText(kind === 'win' ? 'KEEP GOING' : 'TRY AGAIN', W()*0.5, retry.y + 41);
   ctx.font = '700 20px Fredoka';
-  ctx.fillText('MENU', W*0.5, secondary.y + 37);
+  ctx.fillText('MENU', W()*0.5, menu.y + 37);
   ctx.textAlign = 'left';
 }
 
-// -------------------------
-// Main draw
-// -------------------------
 function draw() {
-  if (state.scene === 'menu') {
-    drawMenu();
+  if (assetsLoaded < assetsTotal) {
+    ctx.fillStyle = '#140f22';
+    ctx.fillRect(0, 0, W(), H());
+    ctx.fillStyle = '#fff';
+    ctx.font = '700 26px Fredoka';
+    ctx.fillText('Loading...', W() * 0.5 - 55, H() * 0.5);
     return;
   }
 
-  drawWorld();
-  drawEnemies();
-  drawProjectiles();
-  drawPlayerSprite();
-  drawParticles();
-  drawHUD();
-
-  if (state.scene === 'win') drawEndScreen('win');
-  if (state.scene === 'gameover') drawEndScreen('gameover');
+  if (state.scene === 'menu') {
+    drawMenu();
+  } else if (state.scene === 'playing') {
+    drawBackground();
+    drawObstacles();
+    drawEnemies();
+    drawProjectiles();
+    drawPlayer();
+    drawParticles();
+    drawHUD();
+  } else if (state.scene === 'gameover') {
+    drawEnd('gameover');
+  }
 }
 
-// -------------------------
-// Loop
-// -------------------------
-function loop() {
+function handleMenuTap(x, y) {
+  if (x < W()*0.5) {
+    if (y > H()*0.28 && y < H()*0.28 + 196) state.hero = x < W()*0.5 ? (x < W()*0.5 - 10 ? 'brish' : 'monko') : state.hero;
+  }
+  const leftCard = { x: W()*0.5 - 178, y: H()*0.28, w: 160, h: 196 };
+  const rightCard = { x: W()*0.5 + 18, y: H()*0.28, w: 160, h: 196 };
+  if (x >= leftCard.x && x <= leftCard.x + leftCard.w && y >= leftCard.y && y <= leftCard.y + leftCard.h) state.hero = 'brish';
+  if (x >= rightCard.x && x <= rightCard.x + rightCard.w && y >= rightCard.y && y <= rightCard.y + rightCard.h) state.hero = 'monko';
+
+  const total = 3 * 112 + 2 * 14;
+  const startX = W() * 0.5 - total / 2;
+  for (let i = 0; i < 3; i++) {
+    const bx = startX + i * 126;
+    const by = H() * 0.61;
+    if (x >= bx && x <= bx + 112 && y >= by && y <= by + 62) state.worldIndex = i;
+  }
+  const play = state.ui.menuPlay;
+  if (play && x >= play.x && x <= play.x + play.w && y >= play.y && y <= play.y + play.h) resetGame();
+}
+
+function handleEndTap(x, y) {
+  const r = state.ui.endRetry, m = state.ui.endMenu;
+  if (r && x >= r.x && x <= r.x + r.w && y >= r.y && y <= r.y + r.h) resetGame();
+  if (m && x >= m.x && x <= m.x + m.w && y >= m.y && y <= m.y + m.h) state.scene = 'menu';
+}
+
+function onPress(x, y) {
+  state.pointerDown = true;
+  state.pointerX = x;
+  state.pointerY = y;
+  state.pressX = x;
+  state.pressY = y;
+  state.swipeTriggered = false;
+  state.justPressed = true;
+  if (state.scene === 'playing' && dist(x, y, state.ui.ult?.x || 0, state.ui.ult?.y || 0) < (state.ui.ult?.r || 0)) {
+    useSpecial();
+    state.swipeTriggered = true;
+    state.tutorialDismissed = true;
+  }
+}
+function onMove(x, y) {
+  state.pointerX = x;
+  state.pointerY = y;
+}
+function onRelease(x, y) {
+  state.pointerDown = false;
+  state.pointerX = x;
+  state.pointerY = y;
+  state.tutorialDismissed = true;
+}
+
+function posFromMouse(ev) {
+  const r = canvas.getBoundingClientRect();
+  return { x: ev.clientX - r.left, y: ev.clientY - r.top };
+}
+canvas.addEventListener('mousedown', e => { const p = posFromMouse(e); onPress(p.x, p.y); });
+window.addEventListener('mousemove', e => { const p = posFromMouse(e); onMove(p.x, p.y); });
+window.addEventListener('mouseup', e => { const p = posFromMouse(e); onRelease(p.x, p.y); });
+canvas.addEventListener('touchstart', e => {
+  e.preventDefault();
+  const t = e.changedTouches[0];
+  const r = canvas.getBoundingClientRect();
+  onPress(t.clientX - r.left, t.clientY - r.top);
+}, { passive: false });
+canvas.addEventListener('touchmove', e => {
+  e.preventDefault();
+  const t = e.changedTouches[0];
+  const r = canvas.getBoundingClientRect();
+  onMove(t.clientX - r.left, t.clientY - r.top);
+}, { passive: false });
+canvas.addEventListener('touchend', e => {
+  e.preventDefault();
+  const t = e.changedTouches[0] || e.changedTouches[0];
+  const r = canvas.getBoundingClientRect();
+  const x = t ? t.clientX - r.left : state.pointerX;
+  const y = t ? t.clientY - r.top : state.pointerY;
+  onRelease(x, y);
+}, { passive: false });
+
+window.addEventListener('keydown', e => {
+  if (state.scene === 'menu' && (e.key === 'Enter' || e.key === ' ')) resetGame();
+  if (state.scene === 'playing' && (e.key.toLowerCase() === 's' || e.key === 'ArrowDown' || e.key === 'Shift')) {
+    useSpecial();
+    state.tutorialDismissed = true;
+  }
+});
+
+function tick() {
   update();
   draw();
-  requestAnimationFrame(loop);
+  requestAnimationFrame(tick);
 }
-loop();
+tick();
