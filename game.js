@@ -21,7 +21,8 @@ const gravity = 0.7;
 const imgSrc = {
   brish:'sprites/brish.png', monko:'sprites/monko.png',
   brishCar:'sprites/brish-car.png', monkoCar:'sprites/monko-car.png',
-  brishStrip:'sprites/brish-strip.png'
+  brishStrip:'sprites/brish-strip.png',
+  monkoStrip:'sprites/monko-strip.png'
 };
 const img = {};
 let imgLoaded = 0;
@@ -36,6 +37,11 @@ Object.entries(imgSrc).forEach(([k,v])=>{
 const BA = { idle:[0], walk:[1,2,3,2], jump:[4], fall:[5], punch1:[6,7], punch2:[6] };
 const BFW = 320, BFH = 426;
 let baFrame=0, baTimer=0, baState='idle';
+
+// ---- Monko animation ----
+const MA = { idle:[0], walk:[1,2,3,2], jump:[4], fall:[5], magic1:[6], magic2:[6,7] };
+const MFW = 320, MFH = 426;
+let maFrame=0, maTimer=0, maState='idle';
 
 // ---- Player ----
 const P = {
@@ -317,13 +323,21 @@ function drawCar(){
 function drawPlayer(){
   const x=P.x-cameraX;
   if(P.flash>0){ctx.fillStyle=currentHero==='brish'?'rgba(255,138,101,.25)':'rgba(171,71,188,.22)';ctx.beginPath();ctx.arc(x+P.w/2,P.y+P.h/2,72,0,Math.PI*2);ctx.fill();}
-  // Brish animated
-  if(currentHero==='brish'&&img.brishStrip&&img.brishStrip.complete&&img.brishStrip.naturalWidth>0){
-    updateBrishAnim();
-    const a=BA[baState]||[0];const fi=a[baFrame%a.length];
+  // Animated sprites
+  const useStrip = currentHero==='brish' ? (img.brishStrip&&img.brishStrip.complete&&img.brishStrip.naturalWidth>0) : (img.monkoStrip&&img.monkoStrip.complete&&img.monkoStrip.naturalWidth>0);
+  if(useStrip){
+    if(currentHero==='brish') updateBrishAnim(); else updateMonkoAnim();
+    const anims = currentHero==='brish' ? BA : MA;
+    const state = currentHero==='brish' ? baState : maState;
+    const frame = currentHero==='brish' ? baFrame : maFrame;
+    const strip = currentHero==='brish' ? img.brishStrip : img.monkoStrip;
+    const fw = currentHero==='brish' ? BFW : MFW;
+    const fh = currentHero==='brish' ? BFH : MFH;
+    const a = anims[state]||[0];
+    const fi = a[frame % a.length];
     ctx.save();
-    if(P.facing<0){ctx.translate(x+P.w/2,0);ctx.scale(-1,1);ctx.drawImage(img.brishStrip,fi*BFW,0,BFW,BFH,-P.w/2,P.y,P.w,P.h);}
-    else ctx.drawImage(img.brishStrip,fi*BFW,0,BFW,BFH,x,P.y,P.w,P.h);
+    if(P.facing<0){ctx.translate(x+P.w/2,0);ctx.scale(-1,1);ctx.drawImage(strip,fi*fw,0,fw,fh,-P.w/2,P.y,P.w,P.h);}
+    else ctx.drawImage(strip,fi*fw,0,fw,fh,x,P.y,P.w,P.h);
     ctx.restore();
   } else {
     const i=currentHero==='brish'?img.brish:img.monko;
@@ -345,6 +359,18 @@ function updateBrishAnim(){
   baTimer++;
   const spd=s==='walk'?8:s==='punch1'?5:12;
   if(baTimer>=spd){baTimer=0;baFrame=(baFrame+1)%(BA[baState]||[0]).length;}
+}
+
+function updateMonkoAnim(){
+  let s='idle';
+  if(P.flash>0)s=P.cd1<20?'magic1':'magic2';
+  else if(!P.onGround&&P.vy<0)s='jump';
+  else if(!P.onGround&&P.vy>0)s='fall';
+  else if(Math.abs(P.vx)>.5)s='walk';
+  if(s!==maState){maState=s;maFrame=0;maTimer=0;}
+  maTimer++;
+  const spd=s==='walk'?8:s==='magic2'?5:12;
+  if(maTimer>=spd){maTimer=0;maFrame=(maFrame+1)%(MA[maState]||[0]).length;}
 }
 
 // ---- Resize ----
